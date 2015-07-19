@@ -1,4 +1,5 @@
 from functools import update_wrapper
+from cms.utils.placeholder import get_toolbar_plugin_struct
 
 from cms import __version__ as cms_version
 from cms.plugin_base import CMSPluginBase
@@ -131,9 +132,14 @@ class TextPlugin(CMSPluginBase):
         )
 
     def get_form(self, request, obj=None, **kwargs):
-        plugins = plugin_pool.get_text_enabled_plugins(
+        plugins = get_toolbar_plugin_struct(
+                plugin_pool.get_text_enabled_plugins(
+                self.placeholder.slot,
+                self.page
+            ),
             self.placeholder.slot,
-            self.page
+            self.page,
+            parent=TextPlugin
         )
         pk = self.cms_plugin_instance.pk
         form = self.get_form_class(request, plugins, pk, self.cms_plugin_instance.placeholder,
@@ -163,8 +169,12 @@ class TextPlugin(CMSPluginBase):
         return context
 
     def save_model(self, request, obj, form, change):
-        obj.clean_plugins()
         super(TextPlugin, self).save_model(request, obj, form, change)
+        # This must come after calling save
+        # If `clean_plugins()` deletes child plugins, django-treebeard will call
+        # save() again on the Text instance (aka obj in this context) to update mptt values (numchild, etc).
+        # See this ticket for details https://github.com/divio/djangocms-text-ckeditor/issues/212
+        obj.clean_plugins()
 
 
 plugin_pool.register_plugin(TextPlugin)
